@@ -1,14 +1,8 @@
 import streamlit as st
 import pandas as pd
-import json 
-import os
+import utils as u
 
-this_dir = os.path.dirname(__file__)
-parent_dir = os.path.abspath(os.path.join(this_dir, ".."))
-jsons_dir = os.path.join(parent_dir, "jsons")
-
-with open(os.path.join(jsons_dir, "materials.json"), "r") as f:
-    materials = json.load(f)
+materials = u.import_materials_data()
 
 if st.session_state is None:
     st.session_state={
@@ -34,9 +28,9 @@ with st.form("Declare Parameters"):
     st.form_submit_button("Confirm Parameters")
 
 robot_df = pd.DataFrame({
-    "Length (mm)": [0] * st.session_state["n_segments"],
-    "Outer Radius (mm)": [0] * st.session_state["n_segments"],
-    "Thickness (mm)": [0] * st.session_state["n_segments"]
+    "Length (mm)": [0.0] * st.session_state["n_segments"],
+    "Outer Radius (mm)": [0.0] * st.session_state["n_segments"],
+    "Thickness (mm)": [0.0] * st.session_state["n_segments"]
 })
 robot_df.index.name = "Segment(i)"
 
@@ -44,4 +38,4 @@ st.write("Insert Segment Data")
 st.session_state["robot_data"] = st.data_editor(robot_df)
 
 if st.button("Run Simulation"):
-    st.write("simulation")
+    u.export_robot_json(st.session_state["robot_data"])

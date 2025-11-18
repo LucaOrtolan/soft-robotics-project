@@ -1,9 +1,5 @@
 import json
-import os
-
-this_dir = os.path.dirname(__file__)
-parent_dir = os.path.abspath(os.path.join(this_dir, ".."))
-jsons_dir = os.path.join(parent_dir, "jsons")
+from utils import import_materials_data
 
 class Model:
 
@@ -14,8 +10,7 @@ class Model:
             model_type: NeoHookean, Mooney-Rivlin or Ogden
             material: EcoFlex 0050, Dragon Skin 30 or Sylgard 184"""
         
-        with open(os.path.join(jsons_dir, "materials.json"), "r") as f:
-            self.materials = json.load(f)
+        self.materials = import_materials_data()
 
         self.model_type = model_type
         self.material = material
@@ -23,15 +18,16 @@ class Model:
         if self.model_type not in ["NeoHookean", "Mooney-Rivlin", "Ogden"]:
             print (f"{self.model_type} not supported.")
 
-        if self.material not in list(self.materials.keys()):
-            print(f"{self.material} not supported")
-        
-        self.mu = self.materials[self.material]["mu"]
-        self.C10 = self.materials[self.material]["C10"]
-        self.C01 = self.materials[self.material]["C01"]
-        self.alpha = self.materials[self.material]["alpha"]
-        self.K = self.materials[self.material]["K"]
+        try:        
+            self.mu = self.materials[self.material]["mu"]
+            self.C10 = self.materials[self.material]["C10"]
+            self.C01 = self.materials[self.material]["C01"]
+            self.alpha = self.materials[self.material]["alpha"]
+            self.K = self.materials[self.material]["K"]
 
+        except KeyError:
+            print(f"Material: {self.material} not found")
+            
     def compute_shear_modulus(self):
         if self.model_type == "NeoHookean":
             self.shear_modulus = self.mu
