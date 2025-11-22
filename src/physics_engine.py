@@ -58,11 +58,13 @@ class PhysicsEngine(Model):
         self.model_type = self.data["model"]
         self.material = self.data["material"]
         self.pre_strain = self.data["pre_axial_strain"]
-        self.pressure_a = self.data["pressure_a"] * 1000 # rescale to Pa
-        self.pressure_b = self.data["pressure_b"] * 1000 # rescale to Pa
+        self.delta_p = (self.data["pressure_a"] - self.data["pressure_b"]) * 1000 # rescale to Pa
         self.channel_radius = self.data["channel_radius"]/1000 # rescale to m
         self.septum_thickness = self.data["septum_thickness"]/1000 # rescale to m
         self.robot_data = pd.DataFrame(self.data["robot_data"])
+        self.robot_data = self.convert_geometric_variables_to_m(self.robot_data)
+        self.inverse_kinematics = self.data["inverse_kinematics"] # if True run inverse kinematics
+        self.target_p = pd.DataFrame(self.data["target_p"]) # for inverse kinematics
 
         super().__init__(self.model_type, self.material)
         self.shear_modulus = self.compute_shear_modulus()
@@ -76,7 +78,7 @@ class PhysicsEngine(Model):
         return data
 
     def compute_structural_rigidity(self):
-        df = self.convert_geometric_variables_to_m(self.robot_data)
+        df = self.robot_data.copy()
         df["Inner Radius (m)"] = df["Outer Radius (m)"] - df["Thickness (m)"]
         df["I (m^4)"] = pi/4*(df["Outer Radius (m)"]**4-df["Inner Radius (m)"]**4)
 
@@ -84,10 +86,9 @@ class PhysicsEngine(Model):
         return df
     
     def compute_actuation(self):
-        delta_p = (self.pressure_a-self.pressure_b)
         channel_area = (pi*(self.channel_radius**2))/2
-        centroid_distance = (self.channel_radius+self.septum_thickness/2)+(4*pe.channel_radius)/(3*pi)
-        moment = delta_p*channel_area*centroid_distance
+        centroid_distance = (self.channel_radius+self.septum_thickness/2)+(4*self.channel_radius)/(3*pi)
+        moment = self.delta_p*channel_area*centroid_distance
         return moment
     
     def compute_curvature(self):
@@ -102,7 +103,6 @@ class PhysicsEngine(Model):
         df["Length_pre (m)"] = df["Length (m)"]*(self.stretch_ratio)
         df["theta (rad)"] = df["k (rad/m)"] * df["Length_pre (m)"]
         df["theta (deg)"] = df["theta (rad)"].apply(lambda x: degrees(x))
-        # self intersection check df["theta (deg)"].sum() < 270
         return df
 
     def pcc_kinematics(self):
@@ -123,7 +123,6 @@ class PhysicsEngine(Model):
                 [ -np.sin(theta), 0.0,  np.cos(theta),  np.sin(theta)/k         ],
                 [ 0.0,            0.0,  0.0,            1.0                     ]
             ])
-
             # Update global transform
             T_total = T_total @ T_i
 
@@ -209,27 +208,9 @@ class PhysicsEngine(Model):
         return final_p
 
     
-        
-
-
     
-
-
-
-
-
-
-
-
-
-
-
-pe = PhysicsEngine()
-
-final_p = pe.run_analysis()
-    
-
 
          
 
-    
+pe = PhysicsEngine()
+print(pe.pcc_kinematics())
