@@ -2,6 +2,7 @@ import utils as u
 from math import pi, degrees
 import pandas as pd
 import numpy as np
+from time import perf_counter
 
 class Model:
 
@@ -63,7 +64,7 @@ class PhysicsEngine(Model):
         self.septum_thickness = self.data["septum_thickness"]/1000 # rescale to m
         self.robot_data = pd.DataFrame(self.data["robot_data"])
         self.robot_data = self.convert_geometric_variables_to_m(self.robot_data)
-        self.inverse_kinematics = self.data["inverse_kinematics"] # if True run inverse kinematics
+        self.run_inverse_kinematics = self.data["inverse_kinematics"] # if True run inverse kinematics
         self.target_p = pd.DataFrame(self.data["target_p"]) # for inverse kinematics
 
         super().__init__(self.model_type, self.material)
@@ -116,7 +117,6 @@ class PhysicsEngine(Model):
             theta = row["theta (rad)"]
 
             # Constant‑curvature homogeneous transform for planar bending in x–z
-            # Webster-style CC transform: bend about local y axis [web:14]
             T_i = np.array([
                 [ np.cos(theta),  0.0,  np.sin(theta),  (1.0 - np.cos(theta))/k ],
                 [ 0.0,            1.0,  0.0,            0.0                     ],
@@ -131,6 +131,46 @@ class PhysicsEngine(Model):
         final_p = pd.DataFrame(final_p, index=["x", "y", "z"], columns=["Coordinate"])
         return df, final_p
     
+    # --------------- INVERSE KINEMATICS ---------------
+    def compute_derivative(self, x0, x1, delta_p0, delta_p1):
+        return (x1-x0)/(delta_p1-delta_p0)
+    
+    def pressure_update(self, delta_p1, x1, x_target, f_prime):
+        return delta_p1-(x1-x_target)/f_prime
+
+    def inverse_kinematics(self, max_iterations=20, tolerance=1e-3):
+        start = perf_counter()
+        # Initial guess
+        delta_p1 = self.delta_p
+        # Start from x0=0
+        delta_p0 = 0
+        x0 = 0
+        # Compute x for the initial guess
+        df, final_p = self.pcc_kinematics()
+        x1 = final_p.loc["x", "Coordinate"]
+        # Target
+        x_target = self.target_p.loc["x", "Coordinate"]
+        for i in range(max_iterations):
+            f_prime = self.compute_derivative(x0, x1, delta_p0, delta_p1) 
+            self.delta_p = self.pressure_update(self.delta_p, x1, x_target, f_prime)
+            _, final_p = self.pcc_kinematics()
+            x0 = x1
+            x1 = final_p.loc["x", "Coordinate"]
+            error = x1-x_target
+            delta_p0 = delta_p1
+            delta_p1 = self.delta_p
+            # print(f"iteration = {i}, x = {x1}, delta_p = {delta_p1}")
+            if abs(error) < tolerance:
+                end = perf_counter()
+                print(f"Loop completed in %.4f"%(end-start))
+                return {"Final p": final_p, 
+                        "Delta p": delta_p1,
+                        "Error": error,
+                        "Time": end-start,
+                        "Iterations": i}
+        
+        print(f"Failure to convergence after {i} iterations")
+
     # --------------- WRAPPER FUNCTION ---------------
     def run_analysis(self):
         end = "\n\n"
@@ -206,11 +246,6 @@ class PhysicsEngine(Model):
         final_p["Lower Bound"] = final_p["Coordinate"] - delta
         final_p["Upper Bound"] = final_p["Coordinate"] + delta
         return final_p
-
-    
     
 
-         
-
-pe = PhysicsEngine()
-print(pe.pcc_kinematics())
+    
