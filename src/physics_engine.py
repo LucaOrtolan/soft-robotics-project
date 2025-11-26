@@ -111,15 +111,13 @@ class PhysicsEngine(Model):
         T_total = np.eye(4)
 
         backbone_arc = []
-        joints = [np.array([0.0, 0.0, 0.0])]  # base (joint 0)
+        segment_tips = [np.array([0.0, 0.0, 0.0])]  # base (joint 0)
 
         for _, row in df.iterrows():
             k = row["k (rad/m)"]
             theta = row["theta (rad)"]
             L_pre = row["Length_pre (m)"]
 
-            # record current joint (segment base) in world frame
-            joints.append(T_total[:3, 3].copy())
 
             # build segment transform (same as before)
             T_i = np.array([
@@ -146,14 +144,17 @@ class PhysicsEngine(Model):
 
             # advance to next segment base
             T_total = T_total @ T_i
+            # record current segment_tip in world frame
+            segment_tips.append(T_total[:3, 3].copy())
+
 
         final_p = T_total[:3, 3]
         final_p = pd.DataFrame(final_p, index=["x", "y", "z"], columns=["Coordinate"])
 
         if return_backbone:
             backbone_arc = np.stack(backbone_arc, axis=0)
-            joints = np.stack(joints, axis=0)
-            return df, final_p, backbone_arc, joints
+            segment_tips = np.stack(segment_tips, axis=0)
+            return df, final_p, backbone_arc, segment_tips
 
         return df, final_p
     
@@ -162,7 +163,7 @@ class PhysicsEngine(Model):
         import matplotlib.pyplot as plt
 
         # get arc-sampled backbone and joints
-        df, final_p, backbone, joints = self.pcc_kinematics(
+        df, final_p, backbone, segment_tips = self.pcc_kinematics(
             return_backbone=True,
             n_points_per_segment=n_points_per_segment
         )
@@ -175,12 +176,12 @@ class PhysicsEngine(Model):
         z = backbone[:, 2]
 
         # joint points (segment starts)
-        xj = joints[:, 0]
-        zj = joints[:, 2]
+        xj = segment_tips[:, 0]
+        zj = segment_tips[:, 2]
 
         fig, ax = plt.subplots()
         ax.plot(x, z, '-', label='Backbone (arcs)')
-        ax.scatter(xj, zj, c='r', marker='o', zorder=3)
+        ax.scatter(xj, zj, c='r', marker='o', zorder=3, label='Segment tips')
         ax.scatter([0], [0], c='k', marker='s', zorder=4, label='Base')
 
         ax.set_xlim(-L_tot, L_tot)
@@ -322,4 +323,4 @@ class PhysicsEngine(Model):
 pe = PhysicsEngine()
 for p in range(-100, 101, 20):
     pe.delta_p=p*1000
-    pe.plot_xz_backbone(save_img=True)
+    pe.plot_xz_backbone(save_img=False)
