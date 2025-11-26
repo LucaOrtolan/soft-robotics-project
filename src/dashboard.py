@@ -17,7 +17,8 @@ if st.session_state.get("data") is None:
             "septum_thickness": 0,
             "robot_data": None,
             "inverse_kinematics": False,
-            "target_p": None
+            "n_waypoints": None,
+            "waypoints": None
             }
     }
 
@@ -34,11 +35,6 @@ with st.form("Declare Parameters"):
 
     st.form_submit_button("Confirm Parameters")
 
-st.session_state["data"]["inverse_kinematics"] = st.checkbox("Run Inverse Kinematics")
-if st.session_state["data"]["inverse_kinematics"]:
-    with st.container():
-        st.markdown("#### Specify Target Position")
-        st.session_state["data"]["target_p"] = st.data_editor(pd.DataFrame({"Coordinate": [0.0, 0.0]}, index=["x", "z"]), width="content")
 
 
 robot_df = pd.DataFrame({
@@ -48,11 +44,22 @@ robot_df = pd.DataFrame({
 })
 robot_df.index.name = "Segment(i)"
 
-st.write("Insert Segment Data")
+st.markdown("#### Insert Segment Data")
 st.session_state["data"]["robot_data"] = st.data_editor(robot_df)
+
+st.session_state["data"]["inverse_kinematics"] = st.checkbox("Run Inverse Kinematics")
+if st.session_state["data"]["inverse_kinematics"]:
+    st.session_state["data"]["n_waypoints"] = st.number_input(label="Number of waypoints", min_value=1)
+    with st.container():
+        st.markdown("#### Specify Waypoints Coordinates")
+        waypoints = pd.DataFrame(
+            {"x": [0.0] * st.session_state["data"]["n_waypoints"],
+             "z": [0.0] * st.session_state["data"]["n_waypoints"]})
+        waypoints.index.name="Waypoint(w)"
+        st.session_state["data"]["waypoints"] = st.data_editor(waypoints, width="content")
 
 if st.button("Run Simulation"):
     st.session_state["data"]["robot_data"] = st.session_state["data"]["robot_data"].to_dict()
-    st.session_state["data"]["target_position"] = st.session_state["data"]["target_position"].to_dict()
+    st.session_state["data"]["waypoints"] = st.session_state["data"]["waypoints"].to_dict()
     u.export_json(st.session_state["data"], "data")
     st.write("data successfully exported")

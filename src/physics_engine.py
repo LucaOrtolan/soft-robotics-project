@@ -65,7 +65,7 @@ class PhysicsEngine(Model):
         self.robot_data = pd.DataFrame(self.data["robot_data"])
         self.robot_data = self.convert_geometric_variables_to_m(self.robot_data)
         self.run_inverse_kinematics = self.data["inverse_kinematics"] # if True run inverse kinematics
-        self.target_p = pd.DataFrame(self.data["target_p"]) # for inverse kinematics
+        self.waypoints = pd.DataFrame(self.data["waypoints"]) # for inverse kinematics
 
         super().__init__(self.model_type, self.material)
         self.shear_modulus = self.compute_shear_modulus()
@@ -147,9 +147,8 @@ class PhysicsEngine(Model):
             # record current segment_tip in world frame
             segment_tips.append(T_total[:3, 3].copy())
 
-
         final_p = T_total[:3, 3]
-        final_p = pd.DataFrame(final_p, index=["x", "y", "z"], columns=["Coordinate"])
+        final_p = pd.DataFrame({"x": final_p[0], "z": final_p[2]})
 
         if return_backbone:
             backbone_arc = np.stack(backbone_arc, axis=0)
@@ -190,7 +189,7 @@ class PhysicsEngine(Model):
 
         ax.set_xlabel('x [m]')
         ax.set_ylabel('z [m]')
-        ax.set_title(f'Delta P = {self.delta_p}')
+        ax.set_title(f'Robot Pose with DeltaP = {self.delta_p}')
         ax.grid(True)
         ax.legend()
 
@@ -218,7 +217,7 @@ class PhysicsEngine(Model):
         x0 = 0
         # Compute x for the initial guess
         df, final_p = self.pcc_kinematics()
-        x1 = final_p.loc["x", "Coordinate"]
+        x1 = final_p["x"].iloc[0]
         # Target
         x_target = self.target_p.loc["x", "Coordinate"]
         for i in range(max_iterations):
@@ -321,6 +320,4 @@ class PhysicsEngine(Model):
 
     
 pe = PhysicsEngine()
-for p in range(-100, 101, 20):
-    pe.delta_p=p*1000
-    pe.plot_xz_backbone(save_img=False)
+pe.pcc_kinematics()
