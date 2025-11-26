@@ -106,14 +106,22 @@ class PhysicsEngine(Model):
         df["theta (deg)"] = df["theta (rad)"].apply(lambda x: degrees(x))
         return df
 
-    def pcc_kinematics(self, return_backbone=False):
+    def pcc_kinematics(self, return_backbone=False, n_points_per_segment=20):
         df = self.compute_segment_arc_angles()
         T_total = np.eye(4)
-        backbone = []
+
+        backbone_arc = []
+        joints = [np.array([0.0, 0.0, 0.0])]  # base (joint 0)
+
         for _, row in df.iterrows():
             k = row["k (rad/m)"]
             theta = row["theta (rad)"]
+            L_pre = row["Length_pre (m)"]
 
+            # record current joint (segment base) in world frame
+            joints.append(T_total[:3, 3].copy())
+
+            # build segment transform (same as before)
             T_i = np.array([
                 [ np.cos(theta),  0.0,  np.sin(theta),  (1.0 - np.cos(theta))/k ],
                 [ 0.0,            1.0,  0.0,            0.0                     ],
@@ -121,35 +129,60 @@ class PhysicsEngine(Model):
                 [ 0.0,            0.0,  0.0,            1.0                     ]
             ])
 
+            # sample along local arc (no recomputation of k).[web:18]
+            s_vals = np.linspace(0.0, L_pre, n_points_per_segment+1)
+
+            for s in s_vals:
+                if abs(k) < 1e-9:
+                    x_local = 0.0
+                    z_local = s
+                else:
+                    x_local = (1.0 - np.cos(k * s)) / k
+                    z_local = np.sin(k * s) / k
+
+                p_local = np.array([x_local, 0.0, z_local, 1.0])
+                p_global = T_total @ p_local
+                backbone_arc.append(p_global[:3].copy())
+
+            # advance to next segment base
             T_total = T_total @ T_i
-            backbone.append(T_total[:3, 3].copy())
 
         final_p = T_total[:3, 3]
         final_p = pd.DataFrame(final_p, index=["x", "y", "z"], columns=["Coordinate"])
+
         if return_backbone:
-            backbone = np.stack(backbone, axis=0)   # shape (N+1, 3)
-            return df, final_p, backbone
-        
+            backbone_arc = np.stack(backbone_arc, axis=0)
+            joints = np.stack(joints, axis=0)
+            return df, final_p, backbone_arc, joints
+
         return df, final_p
     
-    def plot_xz_backbone(self, backbone, save_img=False):
-        """Plot final position of the robot in the x,z plane."""
+    def plot_xz_backbone(self, n_points_per_segment=20, save_img=False):
+        """Plot final position of the robot in the x,z plane as smooth arcs, with joints."""
         import matplotlib.pyplot as plt
 
-        # total length of the robot
-        L_tot = self.robot_data["Length (m)"].sum()*0.75 # rescale for better viz
-        # prepend explicit origin point [0, 0, 0]
-        origin = np.array([[0.0, 0.0, 0.0]])
-        backbone = np.vstack([origin, backbone])
+        # get arc-sampled backbone and joints
+        df, final_p, backbone, joints = self.pcc_kinematics(
+            return_backbone=True,
+            n_points_per_segment=n_points_per_segment
+        )
 
+        # total length of the robot for axis limits
+        L_tot = self.robot_data["Length (m)"].sum()
+
+        # backbone points
         x = backbone[:, 0]
         z = backbone[:, 2]
 
-        fig, ax = plt.subplots()
-        ax.plot(x, z, '-o')
-        ax.scatter([0], [0], c='k', marker='s', label='Base')
+        # joint points (segment starts)
+        xj = joints[:, 0]
+        zj = joints[:, 2]
 
-        # symmetric limits so that (0,0) is at plot center
+        fig, ax = plt.subplots()
+        ax.plot(x, z, '-', label='Backbone (arcs)')
+        ax.scatter(xj, zj, c='r', marker='o', zorder=3)
+        ax.scatter([0], [0], c='k', marker='s', zorder=4, label='Base')
+
         ax.set_xlim(-L_tot, L_tot)
         ax.set_ylim(-L_tot, L_tot)
         ax.set_aspect('equal', adjustable='box')
@@ -159,8 +192,9 @@ class PhysicsEngine(Model):
         ax.set_title(f'Delta P = {self.delta_p}')
         ax.grid(True)
         ax.legend()
+
         if save_img:
-            fname=f"robot_pose_deltaP{self.delta_p}.png"
+            fname = f"robot_pose_deltaP{self.delta_p}.png"
             u.save_img(fig, fname)
             print(f"Image {fname} correctly saved in the /images folder")
         else:
@@ -288,5 +322,4 @@ class PhysicsEngine(Model):
 pe = PhysicsEngine()
 for p in range(-100, 101, 20):
     pe.delta_p=p*1000
-    a, b, backbone = pe.pcc_kinematics(return_backbone=True)
-    pe.plot_xz_backbone(backbone, save_img=True)
+    pe.plot_xz_backbone(save_img=True)
