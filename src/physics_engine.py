@@ -132,12 +132,12 @@ class PhysicsEngine(Model):
         
         return df, final_p
     
-    def plot_xz_backbone(self, backbone):
+    def plot_xz_backbone(self, backbone, save_img=False):
         """Plot final position of the robot in the x,z plane."""
         import matplotlib.pyplot as plt
 
         # total length of the robot
-        L_tot = self.robot_data["Length (m)"].sum()
+        L_tot = self.robot_data["Length (m)"].sum()*0.75 # rescale for better viz
         # prepend explicit origin point [0, 0, 0]
         origin = np.array([[0.0, 0.0, 0.0]])
         backbone = np.vstack([origin, backbone])
@@ -159,7 +159,12 @@ class PhysicsEngine(Model):
         ax.set_title(f'Delta P = {self.delta_p}')
         ax.grid(True)
         ax.legend()
-        plt.show()
+        if save_img:
+            fname=f"robot_pose_deltaP{self.delta_p}.png"
+            u.save_img(fig, fname)
+            print(f"Image {fname} correctly saved in the /images folder")
+        else:
+            plt.show()
 
         
     # --------------- INVERSE KINEMATICS ---------------
@@ -284,5 +289,4 @@ pe = PhysicsEngine()
 for p in range(-100, 101, 20):
     pe.delta_p=p*1000
     a, b, backbone = pe.pcc_kinematics(return_backbone=True)
-    print(backbone)
-    pe.plot_xz_backbone(backbone)
+    pe.plot_xz_backbone(backbone, save_img=True)
