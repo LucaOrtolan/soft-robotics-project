@@ -106,31 +106,62 @@ class PhysicsEngine(Model):
         df["theta (deg)"] = df["theta (rad)"].apply(lambda x: degrees(x))
         return df
 
-    def pcc_kinematics(self):
+    def pcc_kinematics(self, return_backbone=False):
         df = self.compute_segment_arc_angles()
-
-        # Initialize list of homogeneous transforms and positions
         T_total = np.eye(4)
-
+        backbone = []
         for _, row in df.iterrows():
             k = row["k (rad/m)"]
             theta = row["theta (rad)"]
 
-            # Constant‑curvature homogeneous transform for planar bending in x–z
             T_i = np.array([
                 [ np.cos(theta),  0.0,  np.sin(theta),  (1.0 - np.cos(theta))/k ],
                 [ 0.0,            1.0,  0.0,            0.0                     ],
                 [ -np.sin(theta), 0.0,  np.cos(theta),  np.sin(theta)/k         ],
                 [ 0.0,            0.0,  0.0,            1.0                     ]
             ])
-            # Update global transform
-            T_total = T_total @ T_i
 
-        # Extract current segment tip position in base frame
+            T_total = T_total @ T_i
+            backbone.append(T_total[:3, 3].copy())
+
         final_p = T_total[:3, 3]
         final_p = pd.DataFrame(final_p, index=["x", "y", "z"], columns=["Coordinate"])
+        if return_backbone:
+            backbone = np.stack(backbone, axis=0)   # shape (N+1, 3)
+            return df, final_p, backbone
+        
         return df, final_p
     
+    def plot_xz_backbone(self, backbone):
+        """Plot final position of the robot in the x,z plane."""
+        import matplotlib.pyplot as plt
+
+        # total length of the robot
+        L_tot = self.robot_data["Length (m)"].sum()
+        # prepend explicit origin point [0, 0, 0]
+        origin = np.array([[0.0, 0.0, 0.0]])
+        backbone = np.vstack([origin, backbone])
+
+        x = backbone[:, 0]
+        z = backbone[:, 2]
+
+        fig, ax = plt.subplots()
+        ax.plot(x, z, '-o')
+        ax.scatter([0], [0], c='k', marker='s', label='Base')
+
+        # symmetric limits so that (0,0) is at plot center
+        ax.set_xlim(-L_tot, L_tot)
+        ax.set_ylim(-L_tot, L_tot)
+        ax.set_aspect('equal', adjustable='box')
+
+        ax.set_xlabel('x [m]')
+        ax.set_ylabel('z [m]')
+        ax.set_title(f'Delta P = {self.delta_p}')
+        ax.grid(True)
+        ax.legend()
+        plt.show()
+
+        
     # --------------- INVERSE KINEMATICS ---------------
     def compute_derivative(self, x0, x1, delta_p0, delta_p1):
         return (x1-x0)/(delta_p1-delta_p0)
@@ -249,3 +280,9 @@ class PhysicsEngine(Model):
     
 
     
+pe = PhysicsEngine()
+for p in range(-100, 101, 20):
+    pe.delta_p=p*1000
+    a, b, backbone = pe.pcc_kinematics(return_backbone=True)
+    print(backbone)
+    pe.plot_xz_backbone(backbone)
