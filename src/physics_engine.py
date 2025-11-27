@@ -148,7 +148,7 @@ class PhysicsEngine(Model):
             segment_tips.append(T_total[:3, 3].copy())
 
         final_p = T_total[:3, 3]
-        final_p = pd.DataFrame({"x": final_p[0], "z": final_p[2]})
+        final_p = pd.DataFrame({"x": final_p[0], "z": final_p[2]}, index=[0])
 
         if return_backbone:
             backbone_arc = np.stack(backbone_arc, axis=0)
@@ -208,7 +208,7 @@ class PhysicsEngine(Model):
     def pressure_update(self, delta_p1, x1, x_target, f_prime):
         return delta_p1-(x1-x_target)/f_prime
 
-    def inverse_kinematics(self, max_iterations=20, tolerance=1e-3):
+    def compute_waypoints(self, max_iterations=20, tolerance=1e-3):
         start = perf_counter()
         # Initial guess
         delta_p1 = self.delta_p
@@ -219,26 +219,27 @@ class PhysicsEngine(Model):
         df, final_p = self.pcc_kinematics()
         x1 = final_p["x"].iloc[0]
         # Target
-        x_target = self.target_p.loc["x", "Coordinate"]
-        for i in range(max_iterations):
-            f_prime = self.compute_derivative(x0, x1, delta_p0, delta_p1) 
-            self.delta_p = self.pressure_update(self.delta_p, x1, x_target, f_prime)
-            _, final_p = self.pcc_kinematics()
-            x0 = x1
-            x1 = final_p.loc["x", "Coordinate"]
-            error = x1-x_target
-            delta_p0 = delta_p1
-            delta_p1 = self.delta_p
-            # print(f"iteration = {i}, x = {x1}, delta_p = {delta_p1}")
-            if abs(error) < tolerance:
-                end = perf_counter()
-                print(f"Loop completed in %.4f"%(end-start))
-                return {"Final p": final_p, 
-                        "Delta p": delta_p1,
-                        "Error": error,
-                        "Time": end-start,
-                        "Iterations": i}
-        
+        for i, row in self.waypoints.iterrows():
+            x_target = row["x"].iloc[0]
+            for i in range(max_iterations):
+                f_prime = self.compute_derivative(x0, x1, delta_p0, delta_p1) 
+                self.delta_p = self.pressure_update(self.delta_p, x1, x_target, f_prime)
+                _, final_p = self.pcc_kinematics()
+                x0 = x1
+                x1 = final_p.loc["x", "Coordinate"]
+                error = x1-x_target
+                delta_p0 = delta_p1
+                delta_p1 = self.delta_p
+                # print(f"iteration = {i}, x = {x1}, delta_p = {delta_p1}")
+                if abs(error) < tolerance:
+                    end = perf_counter()
+                    print(f"Loop completed in %.4f"%(end-start))
+                    return {"Final p": final_p, 
+                            "Delta p": delta_p1,
+                            "Error": error,
+                            "Time": end-start,
+                            "Iterations": i}
+            
         print(f"Failure to convergence after {i} iterations")
 
     # --------------- WRAPPER FUNCTION ---------------
@@ -318,6 +319,3 @@ class PhysicsEngine(Model):
         return final_p
     
 
-    
-pe = PhysicsEngine()
-pe.pcc_kinematics()
