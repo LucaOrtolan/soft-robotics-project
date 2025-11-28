@@ -20,3 +20,7 @@ def save_img(fig, filename, dpi=300, bbox_inches="tight"):
     path = os.path.join(images_dir, filename)
     fig.savefig(path, dpi=dpi, bbox_inches=bbox_inches)
     return path
+
+def clear_imgs_folder():
+    for f in os.listdir(images_dir):
+        os.remove(os.path.join(images_dir, f))

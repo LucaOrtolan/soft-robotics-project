@@ -179,7 +179,7 @@ class PhysicsEngine(Model):
         zj = segment_tips[:, 2]
 
         fig, ax = plt.subplots()
-        ax.plot(x, z, '-', label='Segments')
+        ax.plot(x, z, '-', label='Robot')
         ax.scatter(xj, zj, c='r', marker='o', zorder=3, label='Segment tips')
         ax.scatter([0], [0], c='k', marker='s', zorder=4, label='Base')
 
@@ -190,7 +190,7 @@ class PhysicsEngine(Model):
         ax.set_xlabel('x [m]')
         ax.set_ylabel('z [m]')
         fig.suptitle(image_title)
-        title = f'Pressure = {int(self.delta_p)} | (final_x, final_z) = (%.2f , %.2f)'%(final_p["x"].iloc[0], final_p["z"].iloc[0])
+        title = f'Delta(P) = {int(self.delta_p)} | (x, z) = (%.2f , %.2f)'%(final_p["x"].iloc[0], final_p["z"].iloc[0])
         ax.set_title(title)
         ax.grid(True)
         ax.legend()
@@ -260,17 +260,24 @@ class PhysicsEngine(Model):
     def run_analysis(self):
         end = "\n\n"
         df, final_p = self.pcc_kinematics()
-        self.plot_xz_backbone(save_img=True)
+        df.index.name = "Segment(i)"
+        img_path = self.plot_xz_backbone(save_img=True)
+        results = {"df": df,
+            "Initial_Pose": {
+            "Final p": final_p,
+            "img_path": img_path
+        }}
 
         print(f"Final Coordinates: {final_p}")
 
         print("------- CHECKS ------")
+        check_df = df.copy()
         validation_error = self.check_validation()
-        curvatures_check = self.check_curvatures(df)
-        self_intersection_check = self.check_self_intersection(df)
-        arc_length_check = self.check_arc_length(df)
-        segment_tensile_strain, total_strain = self.check_maximum_tensile_strain(df)
-        thin_wall_check = self.check_thin_wall_assumption(df)
+        curvatures_check = self.check_curvatures(check_df)
+        self_intersection_check = self.check_self_intersection(check_df)
+        arc_length_check = self.check_arc_length(check_df)
+        segment_tensile_strain, total_strain = self.check_maximum_tensile_strain(check_df)
+        thin_wall_check = self.check_thin_wall_assumption(check_df)
         final_uncertainty = self.check_final_uncertainty(final_p)
 
         print("*** Perfect incompressibility validation result = %.4f"%(validation_error), end=end)
@@ -282,6 +289,12 @@ class PhysicsEngine(Model):
         print(f"*** Thin-Wall assumption: {thin_wall_check}", end=end)
         print(f"*** Final position uncertainty: {final_uncertainty}", end=end)
 
+        results["check_df"] = check_df
+
+        if self.run_inverse_kinematics:
+            results["Waypoints"] = self.compute_waypoints()
+
+        return results
 
     # --------------- CHECKS ---------------
     def check_validation(self):
