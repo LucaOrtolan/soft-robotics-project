@@ -41,7 +41,7 @@ robot_df = pd.DataFrame({
     "Length (mm)": [0.0] * st.session_state["data"]["n_segments"],
     "Outer Radius (mm)": [0.0] * st.session_state["data"]["n_segments"],
     "Thickness (mm)": [0.0] * st.session_state["data"]["n_segments"]
-})
+}, index=[i for i in range(1, st.session_state["data"]["n_segments"]+1)])
 robot_df.index.name = "Segment(i)"
 
 st.markdown("#### Insert Segment Data")
@@ -51,11 +51,10 @@ st.session_state["data"]["inverse_kinematics"] = st.checkbox("Run Inverse Kinema
 if st.session_state["data"]["inverse_kinematics"]:
     st.session_state["data"]["n_waypoints"] = st.number_input(label="Number of waypoints", min_value=1)
     with st.container():
-        st.markdown("#### Specify Waypoints Coordinates")
+        st.markdown("##### Specify X Targets")
         waypoints = pd.DataFrame(
-            {"x": [0.0] * st.session_state["data"]["n_waypoints"],
-             "z": [0.0] * st.session_state["data"]["n_waypoints"]})
-        waypoints.index.name="Waypoint(w)"
+            {"x": [0.0] * st.session_state["data"]["n_waypoints"]}, index=[i for i in range(1, st.session_state["data"]["n_waypoints"]+1)])
+        waypoints.index.name="Waypoint(w)"  
         st.session_state["data"]["waypoints"] = st.data_editor(waypoints, width="content")
 
 if st.button("Run Simulation"):

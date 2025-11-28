@@ -157,7 +157,7 @@ class PhysicsEngine(Model):
 
         return df, final_p
     
-    def plot_xz_backbone(self, n_points_per_segment=20, save_img=False):
+    def plot_xz_backbone(self, n_points_per_segment=20, save_img=False, image_title="Final Robot Pose", waypoint=0):
         """Plot final position of the robot in the x,z plane as smooth arcs, with joints."""
         import matplotlib.pyplot as plt
 
@@ -179,24 +179,27 @@ class PhysicsEngine(Model):
         zj = segment_tips[:, 2]
 
         fig, ax = plt.subplots()
-        ax.plot(x, z, '-', label='Backbone (arcs)')
+        ax.plot(x, z, '-', label='Segments')
         ax.scatter(xj, zj, c='r', marker='o', zorder=3, label='Segment tips')
         ax.scatter([0], [0], c='k', marker='s', zorder=4, label='Base')
 
-        ax.set_xlim(-L_tot, L_tot)
-        ax.set_ylim(-L_tot, L_tot)
+        ax.set_xlim(-L_tot*1.25, L_tot*1.25)
+        ax.set_ylim(-L_tot*1.25, L_tot*1.25)
         ax.set_aspect('equal', adjustable='box')
 
         ax.set_xlabel('x [m]')
         ax.set_ylabel('z [m]')
-        ax.set_title(f'Robot Pose with DeltaP = {self.delta_p}')
+        fig.suptitle(image_title)
+        title = f'Pressure = {int(self.delta_p)} | (final_x, final_z) = (%.2f , %.2f)'%(final_p["x"].iloc[0], final_p["z"].iloc[0])
+        ax.set_title(title)
         ax.grid(True)
         ax.legend()
 
         if save_img:
-            fname = f"robot_pose_deltaP{self.delta_p}.png"
-            u.save_img(fig, fname)
+            fname = f"Robot_pose_{waypoint}.png"
+            img_path = u.save_img(fig, fname)
             print(f"Image {fname} correctly saved in the /images folder")
+            return img_path
         else:
             plt.show()
 
@@ -218,34 +221,46 @@ class PhysicsEngine(Model):
         # Compute x for the initial guess
         df, final_p = self.pcc_kinematics()
         x1 = final_p["x"].iloc[0]
+        results = {}
         # Target
-        for i, row in self.waypoints.iterrows():
-            x_target = row["x"].iloc[0]
+        for idx, row in self.waypoints.iterrows():
+            x_target = row["x"]
+            converged = False
             for i in range(max_iterations):
                 f_prime = self.compute_derivative(x0, x1, delta_p0, delta_p1) 
                 self.delta_p = self.pressure_update(self.delta_p, x1, x_target, f_prime)
                 _, final_p = self.pcc_kinematics()
                 x0 = x1
-                x1 = final_p.loc["x", "Coordinate"]
+                x1 = final_p.loc[0, "x"]
                 error = x1-x_target
                 delta_p0 = delta_p1
                 delta_p1 = self.delta_p
                 # print(f"iteration = {i}, x = {x1}, delta_p = {delta_p1}")
                 if abs(error) < tolerance:
-                    end = perf_counter()
-                    print(f"Loop completed in %.4f"%(end-start))
-                    return {"Final p": final_p, 
-                            "Delta p": delta_p1,
-                            "Error": error,
-                            "Time": end-start,
-                            "Iterations": i}
-            
-        print(f"Failure to convergence after {i} iterations")
+                    img_path = self.plot_xz_backbone(save_img=True, 
+                        image_title=f"Robot Pose for Waypoint {idx} (x = {float(x_target)})",
+                        waypoint=idx)
+                    converged=True
+                    break
+            if not converged:
+                print(f"Failure to converge after {i+1} iterations")
+                img_path=None
+            end = perf_counter()
+            results[f"Waypoint_{idx}"] = {"Final p": final_p, 
+            "Delta p": delta_p1,
+            "Error": error,
+            "Time": end-start,
+            "Converged": converged,
+            "Iterations": i,
+            "img_path": img_path}
+        return results
+
 
     # --------------- WRAPPER FUNCTION ---------------
     def run_analysis(self):
         end = "\n\n"
         df, final_p = self.pcc_kinematics()
+        self.plot_xz_backbone(save_img=True)
 
         print(f"Final Coordinates: {final_p}")
 
@@ -313,9 +328,10 @@ class PhysicsEngine(Model):
     def check_final_uncertainty(self, final_p, step_uncertainty=0.01):
         """Computes uncertainty interval for the final position vector assuming uncertainty(%)=sqrt(5)*step_uncertainty (by default 1%)"""
         uncertainty = np.sqrt(5)*step_uncertainty
-        delta = final_p["Coordinate"]*uncertainty
-        final_p["Lower Bound"] = final_p["Coordinate"] - delta
-        final_p["Upper Bound"] = final_p["Coordinate"] + delta
+        for col in final_p.columns:
+            delta = final_p[col]*uncertainty
+            final_p[f"{col} Lower Bound"] = final_p[col] - delta
+            final_p[f"{col} Upper Bound"] = final_p[col] + delta
         return final_p
     
 

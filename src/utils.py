@@ -19,3 +19,4 @@ def save_img(fig, filename, dpi=300, bbox_inches="tight"):
     os.makedirs(os.path.join(parent_dir, ), exist_ok=True)
     path = os.path.join(images_dir, filename)
     fig.savefig(path, dpi=dpi, bbox_inches=bbox_inches)
+    return path
